@@ -6,6 +6,7 @@ sources; the database id from .env is resolved to its data source id
 once and cached).
 """
 
+import time
 from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
@@ -29,9 +30,25 @@ def _get_client() -> Client:
     return _client
 
 
+def _retry(func, /, *args, retries: int = 3, delay: float = 1.5, **kwargs):
+    """This machine's network occasionally has a transient DNS hiccup
+    (getaddrinfo failed) on outbound HTTPS calls - a one-off retry
+    covers it instead of crashing the whole request/page.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(retries):
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001 - deliberately broad, see docstring
+            last_exc = exc
+            if attempt < retries - 1:
+                time.sleep(delay)
+    raise last_exc
+
+
 def _get_data_source_id(database_id: str) -> str:
     if database_id not in _data_source_id_cache:
-        db = _get_client().databases.retrieve(database_id=database_id)
+        db = _retry(_get_client().databases.retrieve, database_id=database_id)
         _data_source_id_cache[database_id] = db["data_sources"][0]["id"]
     return _data_source_id_cache[database_id]
 
@@ -95,7 +112,8 @@ def log_job(job: Job) -> str:
     if job.fit_score is not None:
         properties["Fit Score"] = _number_prop(job.fit_score)
 
-    page = _get_client().pages.create(
+    page = _retry(
+        _get_client().pages.create,
         parent={"type": "data_source_id", "data_source_id": _get_data_source_id(NOTION_JOBS_DATABASE_ID)},
         properties=properties,
     )
@@ -108,7 +126,8 @@ def update_status_by_page_id(page_id: str, status: JobStatus) -> None:
     by the Telegram callback handlers, which only have the page id from
     a button's callback_data, not a full Job object.
     """
-    _get_client().pages.update(
+    _retry(
+        _get_client().pages.update,
         page_id=page_id,
         properties={"Status": _select_prop(status.value.capitalize())},
     )
@@ -135,7 +154,8 @@ def get_weekly_stats() -> dict:
     applied = 0
     cursor = None
     while True:
-        response = _get_client().data_sources.query(
+        response = _retry(
+            _get_client().data_sources.query,
             data_source_id=data_source_id,
             filter={"property": "Date Found", "date": {"on_or_after": since}},
             start_cursor=cursor,
@@ -171,7 +191,8 @@ def get_recent_hard_failed_jobs(days: int = 7) -> list[Job]:
     jobs = []
     cursor = None
     while True:
-        response = _get_client().data_sources.query(
+        response = _retry(
+            _get_client().data_sources.query,
             data_source_id=data_source_id,
             filter={
                 "and": [
@@ -273,7 +294,7 @@ def get_all_jobs(status: str | None = None, source: str | None = None, limit: in
     while len(jobs) < limit:
         if cursor:
             query["start_cursor"] = cursor
-        response = _get_client().data_sources.query(**query)
+        response = _retry(_get_client().data_sources.query, **query)
         jobs.extend(_parse_job_page(page) for page in response["results"])
         if not response.get("has_more"):
             break
@@ -286,7 +307,7 @@ def get_job_by_page_id(page_id: str) -> dict | None:
     detail page. Returns None if the page doesn't exist or is archived.
     """
     try:
-        page = _get_client().pages.retrieve(page_id=page_id)
+        page = _retry(_get_client().pages.retrieve, page_id=page_id)
     except Exception:
         return None
     if page.get("archived"):

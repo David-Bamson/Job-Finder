@@ -10,7 +10,6 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from app.grading.matching import matched_keywords_in_text
 from app.models import JobStatus
 from app.notion.client import get_all_jobs, get_job_by_page_id, update_status_by_page_id
 
@@ -73,6 +72,7 @@ def list_view(
     verified: str = "",
     sort: str = "date",
     q: str = "",
+    min_fit: int = 30,
 ):
     # "All" means no filter, but it can arrive literally as the string
     # "All" (e.g. from the search form's hidden fields), not just as an
@@ -109,7 +109,9 @@ def list_view(
         jobs.sort(key=lambda j: j["legitimacy_score"] if j["legitimacy_score"] is not None else -1, reverse=True)
     # "date" needs no re-sort - get_all_jobs already returns newest first
 
-    review_jobs = [j for j in jobs if j["status"] == "New"]
+    review_jobs_all = [j for j in jobs if j["status"] == "New"]
+    hidden_count = len([j for j in review_jobs_all if (j["fit_score"] or 0) < min_fit]) if min_fit > 0 else 0
+    review_jobs = [j for j in review_jobs_all if (j["fit_score"] or 0) >= min_fit] if min_fit > 0 else review_jobs_all
     pipeline_jobs = [j for j in jobs if j["status"] not in ("New", "Rejected")]
 
     return templates.TemplateResponse(
@@ -127,6 +129,8 @@ def list_view(
             "current_verified": verified or "All",
             "current_sort": sort,
             "current_q": q,
+            "min_fit": min_fit,
+            "hidden_count": hidden_count,
             "stats": _compute_stats(all_jobs),
         },
     )
@@ -151,13 +155,15 @@ def detail_view(request: Request, page_id: str):
                 "current_verified": "All",
                 "current_sort": "date",
                 "current_q": "",
+                "min_fit": 30,
+                "hidden_count": 0,
                 "stats": EMPTY_STATS,
             },
             status_code=404,
         )
 
     related = [j for j in get_all_jobs(limit=20) if j["page_id"] != page_id][:3]
-    matched_keywords = matched_keywords_in_text(f"{job['title']} {job['description'] or ''}")
+    matched_keywords = []  # no fit criteria defined right now - see app/grading/matching.py
 
     return templates.TemplateResponse(
         request,

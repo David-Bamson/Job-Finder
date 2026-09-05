@@ -1,8 +1,8 @@
 {% extends "layout.html" %}
 {% block title %}Vetted &mdash; Job Feed{% endblock %}
 {% block content %}
-{% macro furl(status=current_status, source=current_source, verified=current_verified, sort=current_sort, q=current_q) -%}
-/?status={{ "" if status == "All" else status }}&source={{ "" if source == "All" else source }}&verified={{ "" if verified == "All" else verified }}&sort={{ sort }}&q={{ q }}
+{% macro furl(status=current_status, source=current_source, verified=current_verified, sort=current_sort, q=current_q, min_fit=min_fit) -%}
+/?status={{ "" if status == "All" else status }}&source={{ "" if source == "All" else source }}&verified={{ "" if verified == "All" else verified }}&sort={{ sort }}&q={{ q }}&min_fit={{ min_fit }}
 {%- endmacro %}
 <div class="strip">
   <div class="wrap">
@@ -28,6 +28,7 @@
       <input type="hidden" name="source" value="{{ current_source }}">
       <input type="hidden" name="verified" value="{{ current_verified }}">
       <input type="hidden" name="sort" value="{{ current_sort }}">
+      <input type="hidden" name="min_fit" value="{{ min_fit }}">
       <input type="text" name="q" value="{{ current_q }}" placeholder="Search title (e.g. analyst, frontend, data engineer)"
         style="flex:1; padding:10px 14px; border:1px solid var(--line); border-radius:8px; font-size:14.5px; background:var(--surface); color:var(--ink);">
       <button type="submit" class="actbtn review" style="border:1px solid var(--line);">Search</button>
@@ -36,6 +37,15 @@
 
     <section>
       <div class="section-head"><h2>Needs your review</h2><span class="count mono">{{ review_jobs|length }}</span></div>
+      {% if hidden_count %}
+        <div style="font-size:14px; color:var(--muted); margin:-6px 0 12px;">
+          {{ hidden_count }} low-fit posting{{ "s" if hidden_count != 1 else "" }} hidden &middot; <a href="{{ furl(min_fit=0) }}" style="color:var(--fit);">show all</a>
+        </div>
+      {% elif min_fit == 0 %}
+        <div style="font-size:14px; color:var(--muted); margin:-6px 0 12px;">
+          Showing everything, including low-fit postings &middot; <a href="{{ furl(min_fit=30) }}" style="color:var(--fit);">hide low fit again</a>
+        </div>
+      {% endif %}
       <div class="card-list">
         {% for job in review_jobs %}{% include "_card.html" %}{% else %}<div class="empty">Nothing matches these filters.</div>{% endfor %}
       </div>

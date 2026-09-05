@@ -1,0 +1,20 @@
+# --- Discovery: HTTP calls, scraping, RSS ---
+requests
+beautifulsoup4
+lxml
+feedparser
+
+# --- Telegram bot layer ---
+python-telegram-bot
+
+# --- Notion logging layer ---
+notion-client
+
+# --- Grading: legitimacy web searches ---
+google-search-results  # SerpApi client
+
+# --- Scheduler ---
+APScheduler
+
+# --- Config ---
+python-dotenv

@@ -1,20 +1,15 @@
-"""Fit scoring, rebuilt exactly per direct instruction (2026-09-05):
+"""Fit scoring, narrowed per direct instruction (2026-09-06):
 
-Only these role types count as a fit at all:
-- Data Analyst
-- Data Entry
-- Business Analyst
-- Data Engineer
-- Web Developer
+Only Data Analyst roles count as a fit at all. Data Entry, Business
+Analyst, Data Engineer, and Web Developer were removed entirely - any
+title containing "engineer" is disqualified outright, even if it also
+happens to contain another matched word.
 
-Only these employment types count as a fit at all:
-- Internship
-- Contract
-- Part time
+Employment type still must be one of: internship, contract, part time.
 
-A job must match at least one role AND at least one employment type
-to be considered a fit at all - otherwise it's capped low, no matter
-what else it contains. Volume doesn't matter; precision does.
+A job must match the role AND an employment type to be considered a
+fit at all - otherwise it's capped low, no matter what else it
+contains. Volume doesn't matter; precision does.
 
 Stack keywords are pulled only from the profile's "Current technical
 stack" section (current level: Power BI, Git/GitHub, Python, SQL,
@@ -31,10 +26,12 @@ from app.models import Job
 
 ROLE_KEYWORDS = [
     "data analyst",
-    "data entry",
-    "business analyst",
-    "data engineer",
-    "web developer",
+]
+
+# Any title containing this is disqualified outright, full stop,
+# regardless of any other match.
+EXCLUDED_ROLE_KEYWORDS = [
+    "engineer",
 ]
 
 EMPLOYMENT_TYPE_KEYWORDS = [
@@ -84,11 +81,11 @@ def _text_blob(job: Job) -> str:
 
 
 def grade_fit(job: Job) -> Job:
-    """A job counts as a fit only if it matches one of the five named
-    role types AND one of the three named employment types. Everything
-    else is capped low regardless of any other keyword overlap. Among
-    qualifying jobs, the score scales with how many current-level stack
-    keywords it mentions.
+    """A job counts as a fit only if its title is a Data Analyst role
+    (and not an "engineer" title of any kind) AND it names one of the
+    three employment types. Everything else is capped low regardless of
+    any other keyword overlap. Among qualifying jobs, the score scales
+    with how many current-level stack keywords it mentions.
 
     Role match is checked against the title only, not the description.
     Some sources (the HN hiring thread especially) pack multiple unrelated
@@ -99,10 +96,11 @@ def grade_fit(job: Job) -> Job:
     title_text = (job.title or "").lower()
     text = _text_blob(job)
 
+    is_excluded = any(_contains(title_text, kw) for kw in EXCLUDED_ROLE_KEYWORDS)
     role_match = any(_contains(title_text, kw) for kw in ROLE_KEYWORDS)
     employment_match = any(_contains(text, kw) for kw in EMPLOYMENT_TYPE_KEYWORDS)
 
-    if not (role_match and employment_match):
+    if is_excluded or not (role_match and employment_match):
         job.fit_score = 10
         return job
 

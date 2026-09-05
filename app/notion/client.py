@@ -82,6 +82,8 @@ def log_job(job: Job) -> str:
         "Apply Link": _url_prop(job.apply_url),
         "Pay": _rich_text_prop(job.pay),
         "Notes": _rich_text_prop(job.notes),
+        "Location": _rich_text_prop(job.location),
+        "Description": _rich_text_prop(job.description),
         "Follow-up Date": _date_prop(job.follow_up_date.isoformat() if job.follow_up_date else None),
     }
     if job.legitimacy_score is not None:
@@ -202,6 +204,94 @@ def get_recent_hard_failed_jobs(days: int = 7) -> list[Job]:
             break
         cursor = response.get("next_cursor")
     return jobs
+
+
+def _plain_text(rich_text_list) -> str:
+    return "".join(part.get("plain_text", "") for part in (rich_text_list or []))
+
+
+def _parse_job_page(page: dict) -> dict:
+    """Flatten a Notion page object into a plain dict for the web
+    dashboard (list and detail views).
+    """
+    props = page["properties"]
+    title_parts = props.get("Title", {}).get("title", [])
+    reasons_text = _plain_text(props.get("Legitimacy Reasons", {}).get("rich_text"))
+    reasons = [
+        line[2:].strip() if line.startswith("- ") else line.strip()
+        for line in reasons_text.split("\n")
+        if line.strip()
+    ]
+    status_prop = props.get("Status", {}).get("select")
+    source_prop = props.get("Source", {}).get("select")
+    tier_prop = props.get("Trust Tier", {}).get("select")
+    date_found = props.get("Date Found", {}).get("date")
+    follow_up = props.get("Follow-up Date", {}).get("date")
+
+    return {
+        "page_id": page["id"],
+        "title": title_parts[0]["plain_text"] if title_parts else "",
+        "company": _plain_text(props.get("Company", {}).get("rich_text")),
+        "source": source_prop.get("name") if source_prop else None,
+        "trust_tier": tier_prop.get("name") if tier_prop else None,
+        "date_found": date_found.get("start") if date_found else None,
+        "legitimacy_score": props.get("Legitimacy Score", {}).get("number"),
+        "legitimacy_reasons": reasons,
+        "fit_score": props.get("Fit Score", {}).get("number"),
+        "status": status_prop.get("name") if status_prop else None,
+        "apply_url": props.get("Apply Link", {}).get("url"),
+        "pay": _plain_text(props.get("Pay", {}).get("rich_text")),
+        "notes": _plain_text(props.get("Notes", {}).get("rich_text")),
+        "location": _plain_text(props.get("Location", {}).get("rich_text")),
+        "description": _plain_text(props.get("Description", {}).get("rich_text")),
+        "follow_up_date": follow_up.get("start") if follow_up else None,
+    }
+
+
+def get_all_jobs(status: str | None = None, source: str | None = None, limit: int = 200) -> list[dict]:
+    """Return jobs from the log as plain dicts, newest first, for the
+    web dashboard. Optionally filter by Status and/or Source.
+    """
+    data_source_id = _get_data_source_id(NOTION_JOBS_DATABASE_ID)
+    filters = []
+    if status:
+        filters.append({"property": "Status", "select": {"equals": status}})
+    if source:
+        filters.append({"property": "Source", "select": {"equals": source}})
+
+    query: dict = {
+        "data_source_id": data_source_id,
+        "sorts": [{"property": "Date Found", "direction": "descending"}],
+    }
+    if len(filters) == 1:
+        query["filter"] = filters[0]
+    elif len(filters) > 1:
+        query["filter"] = {"and": filters}
+
+    jobs = []
+    cursor = None
+    while len(jobs) < limit:
+        if cursor:
+            query["start_cursor"] = cursor
+        response = _get_client().data_sources.query(**query)
+        jobs.extend(_parse_job_page(page) for page in response["results"])
+        if not response.get("has_more"):
+            break
+        cursor = response.get("next_cursor")
+    return jobs[:limit]
+
+
+def get_job_by_page_id(page_id: str) -> dict | None:
+    """Return a single job as a plain dict, for the web dashboard's
+    detail page. Returns None if the page doesn't exist or is archived.
+    """
+    try:
+        page = _get_client().pages.retrieve(page_id=page_id)
+    except Exception:
+        return None
+    if page.get("archived"):
+        return None
+    return _parse_job_page(page)
 
 
 def get_trusted_domains() -> list[str]:

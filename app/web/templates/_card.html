@@ -1,0 +1,16 @@
+<a class="card" href="/job/{{ job.page_id }}">
+  <div class="avatar">{{ job.company[:2]|upper }}</div>
+  <div class="card-main">
+    <div class="title">{{ job.title }}</div>
+    <div class="meta">{{ job.company }}<span class="sep">&middot;</span>{{ job.location or "Not stated" }}<span class="sep">&middot;</span>{{ job.source }}
+    {% if job.notes and "india" in job.notes|lower %}<div class="flagnote">&#9888; {{ job.notes }}</div>{% endif %}
+    </div>
+  </div>
+  <div class="card-side">
+    <div class="pillrow">
+      {% if job.legitimacy_score is not none %}<span class="pill verify">legit {{ job.legitimacy_score }}</span>{% else %}<span class="pill muted">not verified</span>{% endif %}
+      <span class="pill fit">fit {{ job.fit_score }}</span>
+    </div>
+    <div class="date">{{ job.date_found[:10] if job.date_found else "" }}</div>
+  </div>
+</a>

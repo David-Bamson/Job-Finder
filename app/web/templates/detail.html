@@ -1,0 +1,100 @@
+{% extends "layout.html" %}
+{% block title %}{{ job.title }} &mdash; Vetted{% endblock %}
+{% block content %}
+<div class="wrap">
+  <a class="back-link" href="/">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    Back to feed
+  </a>
+  <div class="detail-layout">
+    <div>
+      <div class="detail-head">
+        <span class="status-pill pill {{ status_class }}" id="status-pill">{{ job.status }}</span>
+        <h1>{{ job.title }}</h1>
+        <div class="pub">Found {{ job.date_found[:10] if job.date_found else "unknown date" }}</div>
+        <div class="meta-icons">
+          <div><span class="k">Location</span></div>
+          <div><span class="k">Pay</span></div>
+          <div>{{ job.location or "Not stated" }}</div>
+          <div>{{ job.pay or "Not stated" }}</div>
+          <div><span class="k">Source</span></div>
+          <div><span class="k">Trust tier</span></div>
+          <div>{{ job.source }}</div>
+          <div>{{ job.trust_tier }}</div>
+        </div>
+      </div>
+
+      <div class="scorepanels">
+        <div class="scorepanel verify-panel">
+          <div class="sp-head"><span class="label">Legitimacy</span><span class="score mono">{{ (job.legitimacy_score|string ~ " / 100") if job.legitimacy_score is not none else "—" }}</span></div>
+          <ul>
+            {% if job.legitimacy_reasons %}
+              {% for r in job.legitimacy_reasons %}<li><span class="dot"></span>{{ r }}</li>{% endfor %}
+            {% else %}
+              <li><span class="dot"></span>Fit score too low to warrant the full search-based check &mdash; not verified to save API quota.</li>
+            {% endif %}
+          </ul>
+        </div>
+        <div class="scorepanel fit-panel">
+          <div class="sp-head"><span class="label">Fit for you</span><span class="score mono">{{ job.fit_score }} / 100</span></div>
+          <ul>
+            {% if matched_keywords %}<li><span class="dot"></span>Matches: {{ matched_keywords|join(", ") }}</li>{% endif %}
+            <li><span class="dot"></span>{{ "Remote or open to your location" if job.location and "remote" in job.location|lower else "Location: " ~ (job.location or "not stated") }}</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="body-copy">
+        <p>{{ job.description or "No description captured for this listing." }}</p>
+      </div>
+
+      <div class="actionrow" id="action-row">
+        <button class="actbtn approve" data-action="approve">Approve and apply</button>
+        <button class="actbtn review" data-action="review">Needs manual review</button>
+        <button class="actbtn skip" data-action="skip">Skip</button>
+      </div>
+      <div class="toast" id="toast"></div>
+    </div>
+
+    <aside class="side-card">
+      <div class="box company-box">
+        <div class="avatar">{{ job.company[:2]|upper }}</div>
+        <h4>{{ job.company }}</h4>
+        <p>{{ job.source }} &middot; {{ job.trust_tier }}</p>
+      </div>
+      <div class="box">
+        <h3>More from this batch</h3>
+        {% for r in related %}
+          <a href="/job/{{ r.page_id }}" style="display:block; border:1px solid var(--line); border-radius:8px; padding:12px; background:var(--surface); text-decoration:none; margin-bottom:10px;">
+            <div style="font-size:14.5px; font-weight:600; margin-bottom:2px;">{{ r.title }}</div>
+            <div style="font-size:14px; color:var(--muted);">{{ r.company }} &middot; fit {{ r.fit_score }}</div>
+          </a>
+        {% endfor %}
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+  document.getElementById("action-row").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-action]");
+    if (!btn) return;
+    const resp = await fetch("/job/{{ job.page_id }}/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "action=" + btn.dataset.action,
+    });
+    const data = await resp.json();
+    const pill = document.getElementById("status-pill");
+    pill.textContent = data.status;
+    pill.className = "status-pill pill " + data.status_class;
+    const toast = document.getElementById("toast");
+    if ((btn.dataset.action === "approve" || btn.dataset.action === "review") && data.apply_url) {
+      window.open(data.apply_url, "_blank", "noopener");
+      toast.textContent = "Marked " + data.status + " — opening the " + (btn.dataset.action === "approve" ? "apply page" : "posting") + " in a new tab.";
+    } else {
+      toast.textContent = "Marked " + data.status + " just now.";
+    }
+  });
+</script>
+{% endblock %}

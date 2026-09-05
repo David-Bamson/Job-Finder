@@ -1,0 +1,87 @@
+{% extends "layout.html" %}
+{% block title %}Vetted &mdash; Job Feed{% endblock %}
+{% block content %}
+{% macro furl(status=current_status, source=current_source, verified=current_verified, sort=current_sort, q=current_q) -%}
+/?status={{ "" if status == "All" else status }}&source={{ "" if source == "All" else source }}&verified={{ "" if verified == "All" else verified }}&sort={{ sort }}&q={{ q }}
+{%- endmacro %}
+<div class="strip">
+  <div class="wrap">
+    <div class="strip-top">
+      <div>
+        <h1>Your vetted job feed</h1>
+        <p>Every listing here already cleared a fee/deposit scam screen and a fit check against your profile before it reached you.</p>
+      </div>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="num mono">{{ stats.found }}</div><div class="label">Found this week</div></div>
+      <div class="tile"><div class="num mono">{{ stats.sent }}</div><div class="label">Sent to you</div></div>
+      <div class="tile"><div class="num mono">{{ stats.auto_rejected }}</div><div class="label">Auto rejected</div></div>
+      <div class="tile"><div class="num mono">{{ stats.applied }}</div><div class="label">Applied to</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap layout">
+  <main class="feed">
+    <form method="get" action="/" style="margin-bottom:24px; display:flex; gap:8px;">
+      <input type="hidden" name="status" value="{{ current_status }}">
+      <input type="hidden" name="source" value="{{ current_source }}">
+      <input type="hidden" name="verified" value="{{ current_verified }}">
+      <input type="hidden" name="sort" value="{{ current_sort }}">
+      <input type="text" name="q" value="{{ current_q }}" placeholder="Search title (e.g. analyst, frontend, data engineer)"
+        style="flex:1; padding:10px 14px; border:1px solid var(--line); border-radius:8px; font-size:14.5px; background:var(--surface); color:var(--ink);">
+      <button type="submit" class="actbtn review" style="border:1px solid var(--line);">Search</button>
+      {% if current_q %}<a class="actbtn review" style="border:1px solid var(--line); text-decoration:none; display:inline-flex; align-items:center;" href="{{ furl(q='') }}">Clear</a>{% endif %}
+    </form>
+
+    <section>
+      <div class="section-head"><h2>Needs your review</h2><span class="count mono">{{ review_jobs|length }}</span></div>
+      <div class="card-list">
+        {% for job in review_jobs %}{% include "_card.html" %}{% else %}<div class="empty">Nothing matches these filters.</div>{% endfor %}
+      </div>
+    </section>
+    <section>
+      <div class="section-head"><h2>In your pipeline</h2><span class="count mono">{{ pipeline_jobs|length }}</span></div>
+      <div class="card-list">
+        {% for job in pipeline_jobs %}{% include "_card.html" %}{% else %}<div class="empty">Nothing in your pipeline yet.</div>{% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <aside class="rail">
+    <div class="box">
+      <h3>Sort by</h3>
+      <div class="filter-group chips">
+        {% for key, label in sort_options %}
+          <a class="chip {{ 'active' if current_sort == key else '' }}" href="{{ furl(sort=key) }}">{{ label }}</a>
+        {% endfor %}
+      </div>
+      <h3 style="margin-top:4px;">Verification</h3>
+      <div class="filter-group chips">
+        {% for v in verified_options %}
+          <a class="chip {{ 'active' if current_verified == v else '' }}" href="{{ furl(verified=v) }}">{{ v }}</a>
+        {% endfor %}
+      </div>
+      <h3 style="margin-top:4px;">Source</h3>
+      <div class="filter-group chips">
+        {% for s in available_sources %}
+          <a class="chip {{ 'active' if current_source == s else '' }}" href="{{ furl(source=s) }}">{{ s }}</a>
+        {% endfor %}
+      </div>
+      <h3 style="margin-top:4px;">Status</h3>
+      <div class="filter-group chips">
+        {% for s in available_statuses %}
+          <a class="chip {{ 'active' if current_status == s else '' }}" href="{{ furl(status=s) }}">{{ s }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="box">
+      <h3>This week, by the numbers</h3>
+      <div class="miniline"><span>Jobs found</span><span class="v">{{ stats.found }}</span></div>
+      <div class="miniline"><span>Sent to you</span><span class="v">{{ stats.sent }}</span></div>
+      <div class="miniline"><span>Auto rejected</span><span class="v">{{ stats.auto_rejected }}</span></div>
+      <div class="miniline"><span>Applied to</span><span class="v">{{ stats.applied }}</span></div>
+    </div>
+  </aside>
+</div>
+{% endblock %}

@@ -18,3 +18,9 @@ APScheduler
 
 # --- Config ---
 python-dotenv
+
+# --- Web dashboard ---
+fastapi
+uvicorn
+jinja2
+python-multipart

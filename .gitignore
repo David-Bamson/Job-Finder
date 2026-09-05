@@ -8,3 +8,4 @@ venv/
 profile/candidate_profile.md
 data/
 logs/
+.claude/

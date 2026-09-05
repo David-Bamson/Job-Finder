@@ -77,7 +77,7 @@ def fetch_jobs() -> list[Job]:
     """Read unread LinkedIn job alert emails from the configured inbox and
     return the listings they contain as Job objects.
     """
-    mailbox = imaplib.IMAP4_SSL(IMAP_SERVER)
+    mailbox = imaplib.IMAP4_SSL(IMAP_SERVER, timeout=20)
     mailbox.login(EMAIL_ADDRESS, EMAIL_APP_PASSWORD)
     mailbox.select("inbox")
 

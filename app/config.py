@@ -43,4 +43,4 @@ PROFILE_PATH = os.getenv("PROFILE_PATH", "profile/candidate_profile.md")
 # --- Cost control: only run the SerpApi-heavy legitimacy check on jobs
 # whose fit score already clears this bar (or on trusted companies,
 # which skip SerpApi entirely regardless of fit) ---
-FIT_SCORE_THRESHOLD_FOR_FULL_CHECK = int(os.getenv("FIT_SCORE_THRESHOLD_FOR_FULL_CHECK", "50"))
+FIT_SCORE_THRESHOLD_FOR_FULL_CHECK = int(os.getenv("FIT_SCORE_THRESHOLD_FOR_FULL_CHECK", "65"))

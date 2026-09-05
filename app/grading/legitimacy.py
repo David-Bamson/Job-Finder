@@ -118,6 +118,9 @@ def _serpapi_search(query: str, num: int = 5) -> list[dict]:
         return []
     try:
         search = GoogleSearch({"q": query, "api_key": SERPAPI_API_KEY, "num": num})
+        # the client's default timeout is 60000 (seconds, not ms - a library
+        # quirk), which would block for ~16 hours on a stalled connection
+        search.timeout = 20
         return search.get_dict().get("organic_results", [])
     except Exception:
         return []

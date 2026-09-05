@@ -70,7 +70,8 @@ def handle_stats_command() -> str:
 
 
 async def _stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(handle_stats_command())
+    text = await asyncio.to_thread(handle_stats_command)
+    await update.message.reply_text(text)
 
 
 async def _button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -82,7 +83,7 @@ async def _button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if status is None or not page_id:
         return
 
-    update_status_by_page_id(page_id, status)
+    await asyncio.to_thread(update_status_by_page_id, page_id, status)
     await query.edit_message_text(text=f"{query.message.text}\n\n-> Marked: {status.value}")
 
 
@@ -96,10 +97,14 @@ async def _discover_and_alert(context: ContextTypes.DEFAULT_TYPE) -> None:
     too low to warrant a check have legitimacy_score=None and stay
     logged-but-quiet, same as hard fails, to keep alert volume relevant.
     """
-    jobs = discover_all()
-    graded = grade_all(jobs)
+    # discover_all/grade_all/log_job are synchronous (requests, imaplib,
+    # notion-client) and can each take a while; running them on the event
+    # loop directly would freeze Telegram polling and button responses
+    # for the whole cycle, so they run in a background thread instead.
+    jobs = await asyncio.to_thread(discover_all)
+    graded = await asyncio.to_thread(grade_all, jobs)
     for job in graded:
-        log_job(job)
+        await asyncio.to_thread(log_job, job)
         if not job.hard_failed and job.legitimacy_score is not None:
             await context.bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
@@ -109,19 +114,33 @@ async def _discover_and_alert(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def _weekly_summary_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    rejected_jobs = get_recent_hard_failed_jobs(days=7)
+    rejected_jobs = await asyncio.to_thread(get_recent_hard_failed_jobs, days=7)
     await context.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=format_weekly_summary(rejected_jobs))
+
+
+async def _post_init(application: Application) -> None:
+    """Run the discovery cycle once immediately on startup. JobQueue's
+    first=0 doesn't actually fire immediately (a documented APScheduler
+    limitation - the job would otherwise silently wait a full
+    POLL_INTERVAL_HOURS before ever running once), so PTB's own
+    recommended workaround is to manually invoke the job here instead.
+    """
+    job = application.bot_data["discovery_job"]
+    await job.run(application)
 
 
 def run() -> None:
     """Start the bot: registers /stats and the approve/skip/review button
     handler, schedules the discover -> grade -> alert -> log cycle every
-    POLL_INTERVAL_HOURS and the weekly summary every 7 days, then starts
-    polling for updates. Blocks until interrupted.
+    POLL_INTERVAL_HOURS (running once immediately on startup too) and
+    the weekly summary every 7 days, then starts polling for updates.
+    Blocks until interrupted.
     """
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(_post_init).build()
     application.add_handler(CommandHandler("stats", _stats_command))
     application.add_handler(CallbackQueryHandler(_button_callback))
-    application.job_queue.run_repeating(_discover_and_alert, interval=POLL_INTERVAL_HOURS * 3600, first=0)
-    application.job_queue.run_repeating(_weekly_summary_job, interval=7 * 24 * 3600, first=7 * 24 * 3600)
+    application.bot_data["discovery_job"] = application.job_queue.run_repeating(
+        _discover_and_alert, interval=POLL_INTERVAL_HOURS * 3600
+    )
+    application.job_queue.run_repeating(_weekly_summary_job, interval=7 * 24 * 3600)
     application.run_polling()

@@ -89,10 +89,17 @@ def grade_fit(job: Job) -> Job:
     else is capped low regardless of any other keyword overlap. Among
     qualifying jobs, the score scales with how many current-level stack
     keywords it mentions.
+
+    Role match is checked against the title only, not the description.
+    Some sources (the HN hiring thread especially) pack multiple unrelated
+    job openings into one comment/description, so scanning the full text
+    can match a role keyword that belongs to a completely different
+    posting than the one actually being scored.
     """
+    title_text = (job.title or "").lower()
     text = _text_blob(job)
 
-    role_match = any(_contains(text, kw) for kw in ROLE_KEYWORDS)
+    role_match = any(_contains(title_text, kw) for kw in ROLE_KEYWORDS)
     employment_match = any(_contains(text, kw) for kw in EMPLOYMENT_TYPE_KEYWORDS)
 
     if not (role_match and employment_match):

@@ -64,6 +64,12 @@ SORT_OPTIONS = [("date", "Newest"), ("fit", "Highest fit"), ("legit", "Highest l
 VERIFIED_OPTIONS = ["All", "Verified", "Not verified"]
 
 
+# Hard floor for "Needs your review" - not a query param, not
+# adjustable via the URL. Jobs below this never appear on the main
+# feed, full stop; there is no "show them anyway" escape hatch.
+MIN_FIT_TO_SHOW = 65
+
+
 @app.get("/")
 def list_view(
     request: Request,
@@ -72,7 +78,6 @@ def list_view(
     verified: str = "",
     sort: str = "date",
     q: str = "",
-    min_fit: int = 30,
 ):
     # "All" means no filter, but it can arrive literally as the string
     # "All" (e.g. from the search form's hidden fields), not just as an
@@ -110,8 +115,8 @@ def list_view(
     # "date" needs no re-sort - get_all_jobs already returns newest first
 
     review_jobs_all = [j for j in jobs if j["status"] == "New"]
-    hidden_count = len([j for j in review_jobs_all if (j["fit_score"] or 0) < min_fit]) if min_fit > 0 else 0
-    review_jobs = [j for j in review_jobs_all if (j["fit_score"] or 0) >= min_fit] if min_fit > 0 else review_jobs_all
+    hidden_count = len([j for j in review_jobs_all if (j["fit_score"] or 0) < MIN_FIT_TO_SHOW])
+    review_jobs = [j for j in review_jobs_all if (j["fit_score"] or 0) >= MIN_FIT_TO_SHOW]
     pipeline_jobs = [j for j in jobs if j["status"] not in ("New", "Rejected")]
 
     return templates.TemplateResponse(
@@ -129,7 +134,6 @@ def list_view(
             "current_verified": verified or "All",
             "current_sort": sort,
             "current_q": q,
-            "min_fit": min_fit,
             "hidden_count": hidden_count,
             "stats": _compute_stats(all_jobs),
         },
@@ -155,7 +159,6 @@ def detail_view(request: Request, page_id: str):
                 "current_verified": "All",
                 "current_sort": "date",
                 "current_q": "",
-                "min_fit": 30,
                 "hidden_count": 0,
                 "stats": EMPTY_STATS,
             },
